@@ -1,0 +1,250 @@
+clc
+close all
+[bitstream,ta]= PCM_wave();
+bitstream
+ft=[];
+ft1=[];
+ft2=[];
+fc = 10000 ;
+D = 2.5e-8;
+t = 0:D:(6.25e-5)-D;
+%one = cos(2*pi*fc*t);
+%zero = cos(2*pi*fc.*4*t);
+
+%% 
+%Modulation
+
+ %FSK
+ for i = 1:length(bitstream)%for each element of bit string
+     if bitstream(i) == '1'
+         ft = [ft, cos(2*pi*fc*t)];%if 1, same frequency
+     elseif bitstream(i) == '0'
+         ft = [ft, cos(2*pi*fc.*10*t)];% if 0, 10x frequenc
+     end
+ end
+
+ %ASK
+  for i = 1:length(bitstream)
+     if bitstream(i) == '1'
+         ft1 = [ft1, cos(2*pi*fc*t)];%if 1, A = 1
+     elseif bitstream(i) == '0'
+         ft1 = [ft1, cos(2*pi*fc*t*0)-1];%if 0, A = 0
+     end
+  end
+ 
+  %BPSK
+for i = 1:length(bitstream)
+     if bitstream(i) == '1'
+         ft2 = [ft2, cos(2*pi*fc*t+pi)];%if bit changes add pi to w
+     elseif bitstream(i) == '0'
+         ft2 = [ft2, cos(2*pi*fc*t)];
+     end
+end
+
+%% 
+%Demodulation
+
+%FSK
+ fskdemod = diff(ft);
+ fskdemod = [fskdemod, fskdemod(1,end)];
+ peak = abs(hilbert(fskdemod));%typical FM demodulation
+dc = 0.095;
+multiplier = 5;
+peak = peak + dc ;
+peak = peak.*multiplier;%adjusting scale so 1 sits above .5
+[b,a] = butter(10,.15,'low');% and 0 sits below 0.5 so the values 
+filtered = (filtfilt(b,a,peak));% round to 1 and 0 respectivily
+ %demod = filter(b,a,envl);
+  
+ recbit = [];
+ for i=500:2500:400000
+     recbit = [recbit, round(filtered(i))];%convert demodulated signal to
+                                          %binary by rounding peak values
+ end
+ recpoints = [];
+ recbitstream = [];
+ for i = 1:20
+     for n = 1:8
+         recbitstream = [recbitstream, num2str(~recbit(8*(i-1)+n))];
+         %convert recived bits into a bit string
+     end
+     m(i) = bin2dec(recbitstream);%convert bit string to decimal 
+     recbitstream = [];
+     recpoints(i) = (m(i)/120)-1;
+ end
+ 
+%ASK
+ recbit2 = [];
+ for i=500:2500:400000
+     if ft1(i) == 0
+     recbit2 = [recbit2, 0];%look at A to find if its a 1 or 0
+     else                      
+     recbit2 = [recbit2, 1];
+     end
+ end
+ 
+ recbitstream2 = [];
+ for i = 1:20
+     for n = 1:8
+         recbitstream2 = [recbitstream2, num2str(recbit2(8*(i-1)+n))];
+         %convert recived bits into a bit string
+     end
+     m2(i) = bin2dec(recbitstream2);%convert bit string to decimal 
+     recbitstream2 = [];
+     recpoints2(i) = (m2(i)/120)-1;
+ end
+
+ %BPSK
+ 
+ 
+BPSKdemod = [];
+for i = 1:160
+    BPSKdemod = [BPSKdemod ,sin(2*pi*fc*t)];
+end
+BPSKdemod = ft2.*BPSKdemod;%remove carrier
+BPSKdemod = (BPSKdemod+1/3-0.1);%scale
+[b,a] = butter(7,0.01,'low');
+filtered3 = filtfilt(b,a,BPSKdemod);%switch to positive graph for 1
+                                    %negative graph for 0
+recbit3 = [];
+ for i=500:2500:400000
+     recbit3 = [recbit3, round(filtered3(i))];%convert demodulated signal to
+                                          %binary by rounding peak values
+ end
+ recpoints3 = [];
+ recbitstream3 = [];
+ for i = 1:20
+     for n = 1:8
+         recbitstream3 = [recbitstream3, num2str(~recbit3(8*(i-1)+n))];
+         %convert recived bits into a bit string
+     end
+     m3(i) = bin2dec(recbitstream3);%convert bit string to decimal 
+     recbitstream3 = [];
+     recpoints3(i) = (m3(i)/120)-1;
+ end
+ 
+ 
+ %% 
+ %FFT for frequency plots
+ 
+ 
+L = 1000; 
+X = [ft; ft1; ft2]; % array of all signals used for FFT
+n = 2^nextpow2(L);
+dim = 2;
+Y = fft(X,n,dim); %FFT for frequency spectrum
+P2 = abs(Y/n);
+P1 = P2(:,1:n/2+1);
+P1(:,2:end-1) = 2*P1(:,2:end-1);
+T = 12e-3;
+Fs = 1/T; 
+ 
+ 
+ 
+ 
+
+ %% 
+ %Plots
+ time = 0:D:0.01-D;
+ bittime = 0:62.89e-6:0.01;
+ %FSK
+figure(1)
+subplot(5,1,1); 
+plot(time,ft)
+title('FSK signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+
+subplot(5,1,2); 
+stem(0:(Fs/n):(Fs/2-Fs/n),P1(1,1:n/2))
+title('Frequency Spectrum of FSK Signal')
+grid;
+
+subplot(5,1,3); 
+plot(time,filtered)
+title('Demodulated signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+
+subplot(5,1,4); 
+plot(ta,recpoints, '.')
+title('Recived points')
+xlabel('Time (s)')
+ylabel('Magnitude')
+grid;
+
+subplot(5,1,5); 
+plot(ta,recpoints)
+title('Recreated signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+grid;
+
+
+
+%ASK
+figure(2)
+subplot(5,1,1);
+plot(time,ft1)
+title('ASK signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+
+subplot(5,1,2); 
+stem(0:(Fs/n):(Fs/2-Fs/n),P1(2,1:n/2))
+title('Frequency Spectrum of ASK Signal')
+grid;
+
+subplot(5,1,3);
+plot(bittime,recbit2)
+title('Demodulated signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+
+subplot(5,1,4);
+plot(ta,recpoints2, '.')
+title('Recived points')
+xlabel('Time (s)')
+ylabel('Magnitude')
+grid;
+
+subplot(5,1,5);
+plot(ta,recpoints2)
+title('Recreated signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+grid;
+
+
+ %BPSK
+figure(3)
+subplot(5,1,1); 
+plot(time,ft2)
+title('BPSK signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+
+subplot(5,1,2); 
+stem(0:(Fs/n):(Fs/2-Fs/n),P1(3,1:n/2))
+title('Frequency Spectrum of BPSK Signal')
+grid;
+
+subplot(5,1,3); 
+plot(time,filtered3)
+title('Demodulated signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+
+subplot(5,1,4); 
+plot(ta,recpoints3, '.')
+title('Recived points')
+xlabel('Time (s)')
+ylabel('Magnitude')
+grid;
+
+subplot(5,1,5); 
+plot(ta,recpoints3)
+title('Recreated signal')
+xlabel('Time (s)')
+ylabel('Magnitude')
+grid;
